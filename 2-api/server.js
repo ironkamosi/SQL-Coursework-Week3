@@ -10,10 +10,12 @@ app.use(cors({ origin: "*" }));
 const pool = new Pool();
 
 //-----------------SQL queries-----------------------------
- let selectProductsQuery = `SELECT
+ let selectProductsQuery = `
+  SELECT
     * FROM products AS p
     INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
     INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
+
 const customersSelectQuery = `SELECT * FROM customers Order by id`;
 const customerSelectIdOrdersQuery = `SELECT 
         customers.name AS "Customer Name", 
@@ -30,6 +32,11 @@ const customerSelectIdOrdersQuery = `SELECT
         INNER JOIN orders ON orders.id=order_items.order_id 
         INNER JOIN customers ON customers.id=orders.customer_id
       WHERE customer_id= $1`;
+
+
+
+
+
 
 const suppliersSelectQuery = `SELECT * FROM suppliers`;
 const productsSelectQuery = `
@@ -60,44 +67,35 @@ function stringValidator(string) {
   return true;
 }
 
+//---------------Validator solely for validating--------------- 
+function nameStringValidator(string) {
+  const regexp = /^[a-zA-Z ]{1,60}$/;
+
+  if (typeof string !== "string" && !(string instanceof String)) {
+    return false;
+  }
+  if (!string.match(regexp)) {
+    return false;
+  }
+  return true;
+}
+
 //----------------Invalid------------------------------------
 const invalidOrderMessage = { message: "Invalid order id" };
 
 //------------------------------------GET----------------------------------------------------------
-
-
-/*
-// Future reference:  deduplicating code
-
-let query = `SELECT * FROM products AS p
-  INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
-  INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
-
-  if (productName) {
-    query = query + ` WHERE product_name ILIKE '%${productName}%'`;
-  }
-*/
-
-
-
+   
+// Read - get all products & filter products by name
 app.get("/products", async (req, res) => {
   let productName = req.query.name;
  
-  // let query = `
-  // SELECT
-  //   * FROM products AS p
-  //   INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
-  //   INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
-
   if (productName) {
     if (!stringValidator(productName)) {
       res.status(400).send({message:`Invalid product name ${productName}`});
        return;
      }
     selectProductsQuery = `${selectProductsQuery} WHERE product_name ILIKE '%${productName}%'`;
-
-  }
-
+  }     
 
   pool
     .query(selectProductsQuery)
@@ -118,11 +116,12 @@ app.get("/customers", async (req, res) => {
   }
 });
 
+// Read -get a single customer data by id
 app.get("/customers/:customerId", function (req, res) {
   const customerId = parseInt(req.params.customerId);
 
   if (isNaN(customerId) || customerId <= 0) {
-    res.status(400).send(`Bad customer ID: ${customerId}`);
+    res.status(400).send({message:`Bad customer ID: ${customerId}`});
     return;
   }
 
@@ -136,12 +135,12 @@ app.get("/customers/:customerId", function (req, res) {
 
 
 
-// Read- **Task 11** get all customer data
+// Read-  get a customer order by id
 app.get("/customers/:customerId/orders", function (req, res) {
   const customerId = parseInt(req.params.customerId);
 
   if (!isValidID(customerId)) {
-    res.status(400).send(`Bad customer ID: ${customerId}`);
+    res.status(400).send({message: `Bad customer ID: ${customerId}`});
     return; //
   }
 
@@ -155,6 +154,7 @@ app.get("/customers/:customerId/orders", function (req, res) {
 });
 
 //------------------------------------POST----------------------------------------------------------
+
 //Create- Create new customer entry
 app.post("/customers", function (req, res) {
   const newCustomerId = parseInt(req.body.id);
@@ -166,16 +166,59 @@ app.post("/customers", function (req, res) {
   if (!Number.isInteger(newCustomerId) || newCustomerId <= 0) {
     return res
       .status(400)
-      .send("The customer id should be a positive integer.");
+      .send({
+        message: `The customer id ${newCustomerId} should be a positive integer.`,
+      });
   }
 
+  pool
+    .query("SELECT * FROM customers WHERE id=$1", [newCustomerId])
+    .then((result) => {
+      if (result.rows.length > 0) {
+        return res
+          .status(400)
+          .send({message: `FATAL ERROR: A customer with the same id ${newCustomerId} already exists!`});
+      }
+    });
+
+if (newCustomerName) {
+  if (!nameStringValidator(newCustomerName)) {
+    res
+      .status(400)
+      .send({
+        message: `Invalid customer name ${newCustomerName} only English characters accepted`,
+      });
+    return;
+  }
+} 
+  
+if (newCustomerCity) {
+  if (!nameStringValidator(newCustomerCity)) {
+    res
+      .status(400)
+      .send({ message: `Invalid  city name ${newCustomerCity} only English characters accepted` });
+    return;
+  }
+} 
+  
+if (newCustomerCountry) {
+  if (!nameStringValidator(newCustomerCountry)) {
+    res
+      .status(400)
+      .send({
+        message: `Invalid  country name ${newCustomerCountry} only English characters accepted`,
+      });
+    return;
+  }
+} 
+  
   pool
     .query("SELECT * FROM customers WHERE name=$1", [newCustomerName])
     .then((result) => {
       if (result.rows.length > 0) {
         return res
           .status(400)
-          .send("A customer with the same name already exists!");
+          .send({message:`FATAL ERROR: A customer with the same name ${newCustomerName} already exists!`});
       } else {
         const query =
           "INSERT INTO customers (id, name, address, city, country) VALUES ($1, $2, $3, $4,$5)";
@@ -187,72 +230,96 @@ app.post("/customers", function (req, res) {
             newCustomerCity,
             newCustomerCountry,
           ])
-          .then(() => res.send("New customer created!"))
-          .catch((e) => console.error(e));
+          .then(() =>
+            res.send({ message: `New customer data has been created!` })
+          )
+          .catch((e) => {
+            console.error(e.stack);
+            res.status(500).send({ message: "Internal Server Error" });
+          });
       }
     });
 });
+
 
 app.post("/products", function (req, res) {
   const newProductName = req.body.product_name;
 
-  if (newProductName <= 0) {
-    return res.status(400).send("The product id should be a positive integer.");
-  }
-
+  // if (newProductName) {
+  //   if (!nameStringValidator(newProductName)) {
+  //     res.status(400).send({
+  //       message: `Invalid product name ${newProductName} only English characters accepted`
+  //     });
+  //     return;
+  //   }
+  // } 
+  
   pool
     .query(`SELECT * FROM products WHERE product_name=$1`, [newProductName])
     .then((result) => {
       if (result.rows.length > 0) {
-        return res.status(400).send("This product already exists!");
+        return res
+          .status(400)
+          .send({ message: `This product ${newProductName} already exists!` });
       } else {
-        const query = `INSERT INTO products (product_name) VALUES ($1)`;
+        const insertProductQuery = `INSERT INTO products (product_name) VALUES ($1)`;
 
         pool
-          .query(query, [newProductId, newProductName])
-          .then(() => res.send("New product has been created!"))
-          .catch((e) => console.error(e));
+          .query(insertProductQuery, [newProductName])
+          .then(() =>
+            res.send({
+              message: `New product ${newProductName} has been created!`,
+            })
+          )
+          .catch((e) => {
+            console.error(e.stack);
+            res.status(500).send({ message: "Internal Server Error" });
+          });
       }
     });
 });
 
-/*
-Add a new POST endpoint /availability to create a new product availability 
-(with a price and a supplier id). Check that the price is a positive integer 
-and that both the product and supplier ID's exist in the database, otherwise return an error.
-*/
 
-// app.post("/availability", function (req, res) {
-//   const newUnitProdId = req.body.prod_id;
-//   const newSupplierId = req.body.supp_id;
-//   const newUnitPrice = req.body.unit_price;
-//   const query =
-//     "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
-
-//   pool
-//     .query(query, [newUnitProdId, newSupplierId, newUnitPrice])
-//     .then(() => res.send("new product availability created!"))
-//     .catch((e) => console.error(e));
-// });
-
-/*
-Add a new POST endpoint /availability to create a new product availability
+/*Add a new POST endpoint /availability to create a new product availability
  (with a price and a supplier id). 
- Check that the price is a positive integer and 
- that both the product and supplier ID's exist in the database, 
+ Check that the price is a positive integer 
+ and that both the product and supplier ID's exist in the database, 
  otherwise return an error.
-*/
+
+ */
 app.post("/availability", function (req, res) {
   const newUnitProdId = req.body.prod_id;
   const newSupplierId = req.body.supp_id;
   const newUnitPrice = req.body.unit_price;
 
-  //prod_id
   if (!Number.isInteger(newUnitPrice) || newUnitPrice <= 0) {
     return res
       .status(400)
       .send("The the unit price must be a positive integer.");
   }
+
+  // Error handler for product id
+  pool
+    .query("SELECT * FROM products WHERE id=$1", [newUnitProdId])
+    .then((result) => {
+      if (result.rows.length < 0) {
+        return res.status(400).send({
+          message: `FATAL ERROR: This product ${newUnitProdId} does not exist!`,
+        });
+      }
+    });
+
+
+  //Error handler for supplier id
+  // pool
+  //   .query("SELECT * FROM suppliers WHERE id=$1", [newSupplierId])
+  //   .then((result) => {
+  //     if (result.rows.length < 0) {
+  //       return res.status(400).send({
+  //         message: `FATAL ERROR: This supplier ${newSupplierId} does not exist`,
+  //       });
+  //     }
+  //   });
 
   pool
     .query(
@@ -261,25 +328,29 @@ app.post("/availability", function (req, res) {
     )
     .then((result) => {
       if (result.rows.length > 0) {
-        return res
-          .status(400)
-          .send("A price already exists for this supplier please use update!");
+        return res.status(400).send({
+          message: `FATAL ERROR: Either product ${newUnitProdId} or a supplier ID ${newSupplierId} or both do not exist in the database`,
+        });
       } else {
-        const query =
+        const insertProductAvailabilityQuery =
           "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
         pool
-          .query(query, [newUnitProdId, newSupplierId, newUnitPrice])
-          .then(() => res.send("new product availability created!"))
-          .catch((e) => res.send(e));
+          .query(insertProductAvailabilityQuery, [
+            newUnitProdId,
+            newSupplierId,
+            newUnitPrice,
+          ])
+          .then(() =>
+            res.send({ message: `new product availability created!` })
+          )
+          .catch((e) => {
+            console.error(e.stack);
+            res.status(500).send({ message: "Internal Server Error" });
+          });
       }
     });
 });
 
-/*
-Add a new POST endpoint /customers/:customerId/orders to create a new order 
-(including an order date, and an order reference) for a customer. 
-Check that the customerId corresponds to an existing customer or return an error.
-*/
 
 app.post("/customers/:customerId/orders", function (req, res) {
   const newCustomerId = parseInt(req.params.customerId);
