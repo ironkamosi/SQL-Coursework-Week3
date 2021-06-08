@@ -10,7 +10,11 @@ app.use(cors({ origin: "*" }));
 const pool = new Pool();
 
 //-----------------SQL queries-----------------------------
-const customersSelectQuery = `SELECT * FROM customers`;
+ let selectProductsQuery = `SELECT
+    * FROM products AS p
+    INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
+    INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
+const customersSelectQuery = `SELECT * FROM customers Order by id`;
 const customerSelectIdOrdersQuery = `SELECT 
         customers.name AS "Customer Name", 
         orders.order_reference, 
@@ -27,7 +31,6 @@ const customerSelectIdOrdersQuery = `SELECT
         INNER JOIN customers ON customers.id=orders.customer_id
       WHERE customer_id= $1`;
 
-
 const suppliersSelectQuery = `SELECT * FROM suppliers`;
 const productsSelectQuery = `
 SELECT
@@ -38,55 +41,30 @@ FROM product_availability AS p_a
   INNER JOIN products AS p ON p.id=p_a.prod_id
   INNER JOIN suppliers ON  suppliers.id=p_a.supp_id`;
 
-
-
 const productsByNameSelectorQuery = `SELECT * FROM products`;
 
-//------------------Utility function------------------------
-
+//------------------Utility functions------------------------
 function isValidID(id) {
   return !isNaN(id) && id >= 0;
 }
 
-function isValidSupplier(supplier) {
-  // Only accept letters, numbers, white space and dash characters
-  const regexp = /^[a-zA-Z0-9 -]{1,60}$/;
-  return (
-    supplier.match && // Make sure the match method exists
-    supplier.match(regexp)
-  ); // Execute regular expression matching
+function stringValidator(string) {
+    const regexp = /^[a-zA-Z0-9 -]{1,60}$/;
+
+  if (typeof string !== "string" && !(string instanceof String)) {
+    return false;
+  }
+  if (!string.match(regexp)) {
+    return false;
+  }
+  return true;
 }
 
 //----------------Invalid------------------------------------
 const invalidOrderMessage = { message: "Invalid order id" };
 
-//Task 1 load all products with their names, prices and supplier names
-// app.get("/products", async (req, res) => {
-//   try {
-//     const result = await pool.query(productsSelectQuery);
-//     res.send(result.rows);
-//   } catch (error) {
-//     res.status(500).send(error);
-//   }
-// });
-
 //------------------------------------GET----------------------------------------------------------
-// Read - **Task 1** get all products &  **Task 2** filter product names
-// app.get("/products", function (req, res) {
-//   let productQuery = req.query.name;
-//   let query = `SELECT * FROM products
-//   `;
-//   //   let query = `SELECT p.id, p.product_name, p_a.unit_price, suppliers.supplier_name FROM product_availability AS p_a
-//   // INNER JOIN products AS p ON p.id=p_a.prod_id
-//   // INNER JOIN suppliers ON  suppliers.id=p_a.supp_id`;
-//   if (productQuery) {
-//     query = `SELECT * FROM products WHERE product_name ILIKE '%${productQuery}%'`;
-//   }
-//   pool
-//     .query(query)
-//     .then((result) => res.json(result.rows))
-//     .catch((e) => console.error(e));
-// });
+
 
 /*
 // Future reference:  deduplicating code
@@ -100,28 +78,29 @@ let query = `SELECT * FROM products AS p
   }
 */
 
+
+
 app.get("/products", async (req, res) => {
   let productName = req.query.name;
-  if (!isValidSupplier(productName)) {
-    res.status(400).send("Invalid product name");
-    return;
-  }
-
-  let query = `
-  SELECT
-    * FROM products AS p
-    INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
-    INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
+ 
+  // let query = `
+  // SELECT
+  //   * FROM products AS p
+  //   INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
+  //   INNER JOIN suppliers As s ON  s.id=p_a.supp_id `;
 
   if (productName) {
-    query = `
-    SELECT *FROM products AS p
-      INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
-      INNER JOIN suppliers As s ON  s.id=p_a.supp_id
-    WHERE product_name ILIKE '%${productName}%'`;
+    if (!stringValidator(productName)) {
+      res.status(400).send({message:`Invalid product name ${productName}`});
+       return;
+     }
+    selectProductsQuery = `${selectProductsQuery} WHERE product_name ILIKE '%${productName}%'`;
+
   }
+
+
   pool
-    .query(query)
+    .query(selectProductsQuery)
     .then((result) => res.json(result.rows))
     .catch((e) => {
       res.status(500).send(e);
@@ -154,6 +133,8 @@ app.get("/customers/:customerId", function (req, res) {
     })
     .catch((e) => console.error(e));
 });
+
+
 
 // Read- **Task 11** get all customer data
 app.get("/customers/:customerId/orders", function (req, res) {
@@ -254,6 +235,13 @@ and that both the product and supplier ID's exist in the database, otherwise ret
 //     .catch((e) => console.error(e));
 // });
 
+/*
+Add a new POST endpoint /availability to create a new product availability
+ (with a price and a supplier id). 
+ Check that the price is a positive integer and 
+ that both the product and supplier ID's exist in the database, 
+ otherwise return an error.
+*/
 app.post("/availability", function (req, res) {
   const newUnitProdId = req.body.prod_id;
   const newSupplierId = req.body.supp_id;
@@ -347,8 +335,6 @@ app.put("/customers/:customerId", function (req, res) {
       [customerName, customerAddress, customerCity, customerCountry, customerId]
     )
     .then((result) => {
-      // console.log(result.rowCount.length)
-
       if (result.rowCount === 0) {
         return res
           .status(400)
@@ -360,84 +346,74 @@ app.put("/customers/:customerId", function (req, res) {
     .catch((e) => console.error(e));
 });
 
-/*
-Add a new PUT endpoint /customers/:customerId to update an existing customer (name, address, city and country).
-*/
+
 
 //----------------------------------------DELETE--------------------------------------------------------
 
-//Add a new DELETE endpoint /orders/:orderId 
-//to delete an existing order along with all 
-//the associated order items.
-
-const orderDeleteQuery = `
-DELETE *
-  FROM orders As o
-  iNNER JOIN order_items As o_i ON o_i.id=o.id
-WHERE o.id=1;`;
-
 app.delete("/orders/:orderId", function (req, res) {
-  const orderId = parseInt(req.params.customerId);
-  if (!isValidID(orderId)) {
-    res.status(404).send(invalidOrderMessage);
-    return;
-  }
+  const orderId = parseInt(req.params.orderId);
+
+   if (!isValidID(orderId)) {
+     res.status(404).send(invalidOrderMessage);
+     return;
+   }
   pool
-    .query(orderDeleteQuery, [orderId])
+    .query("DELETE FROM order_items WHERE order_id=$1", [orderId])
     .then(() => {
       pool
-        .query(orderDeleteQuery, [orderId])
-        .then(() => res.send(`Order id ${orderId} has been deleted!`))
-        .catch((e) => {
-          console.error(e);
-          res.send(e);
-        });
-    })
-    .catch((e) => {
-      console.error(e);
-      res.send(e);
-    });
-});
-
-
-//Add a new DELETE endpoint /customers/:customerId to delete an existing customer only if this customer doesn't have orders.
-
-const customerNotFoundMessage = { message: "customer not found" };
-
-app.delete("/customers/:customerId", function (req, res) {
-  const customerId = parseInt(req.params.customerId);
-  if (!isValidID(customerId)) {
-    res.status(404).send(customerNotFoundMessage);
-    return;
-  }
-
-  if (customerId) {
-    
-  }
-
-  pool
-    .query("DELETE FROM bookings WHERE customer_id=$1", [customerId])
-    .then(() => {
-      pool
-        .query("DELETE FROM customers WHERE id=$1", [customerId])
-        .then(() => res.send(`Customer ${customerId} deleted!`))
+        .query("DELETE FROM orders WHERE id=$1", [orderId])
+        .then(() =>
+          res.send(
+            `Order ${orderId} has been successfully deleted from the database !`
+          )
+        )
         .catch((e) => console.error(e));
     })
     .catch((e) => console.error(e));
 });
 
 
-/*
+app.delete("/customers/:customerId", function (req, res) {
+  const customerId = parseInt(req.params.customerId);
 
-if customer id !==order{
-  
-}
-*/
+  if (!isValidID(customerId)) {
+    res.status(404).send(customerNotFoundMessage);
+    return;
+  }
+
+  pool
+    .query("SELECT FROM orders WHERE customer_id=$1", [customerId])
+    .then((result) => {
+      if (result.rows.length > 0) {
+        return res
+          .status(400)
+          .send(
+            `This Customer ${customerId} has existing orders and cannot be deleted`
+          );
+      }
+
+      pool
+        .query("DELETE FROM customers WHERE id=$1", [customerId])
+        .then(() =>
+          res.send(
+            `Customer ${customerId} deleted because they have no orders!`
+          )
+        )
+        .catch((e) => {
+          console.error(e.stack);
+          res.status(500).send({ message: "Internal Server Error" });
+        });
+    })
+    .catch((e) => {
+      console.error(e);
+      res.status(500).send({ message: "Internal Server Error" });
+    });
+});
 
 
 app.listen(4010, function () {
   console.log("Server is listening on port 4010. Ready to accept requests!");
 });
-// const listener = app.listen(process.env.PORT || 4005, function () {
+// const listener = app.listen(process.env.PORT || 4010, function () {
 //   console.log("Your app is listening on port " + listener.address().port);
 // });
