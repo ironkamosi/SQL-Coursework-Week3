@@ -33,26 +33,13 @@ const customerSelectIdOrdersQuery = `SELECT
         INNER JOIN customers ON customers.id=orders.customer_id
       WHERE customer_id= $1`;
 
-const suppliersSelectQuery = `SELECT * FROM suppliers`;
-const productsSelectQuery = `
-SELECT
-  p.product_name,
-  p_a.unit_price,
-  suppliers.supplier_name
-FROM product_availability AS p_a
-  INNER JOIN products AS p ON p.id=p_a.prod_id
-  INNER JOIN suppliers ON  suppliers.id=p_a.supp_id`;
-
-const productsByNameSelectorQuery = `SELECT * FROM products`;
-
 //------------------Utility functions------------------------
 function isValidID(id) {
   return !isNaN(id) && id >= 0;
 }
 
-function stringValidator(string) {
-  const regexp = /^[a-zA-Z0-9 -]{1,60}$/;
-
+function productStringValidator(string) {
+  const regexp = /^[a-zA-Z0-9 -]{1,100}$/
   if (typeof string !== "string" && !(string instanceof String)) {
     return false;
   }
@@ -62,10 +49,25 @@ function stringValidator(string) {
   return true;
 }
 
-//---------------Validator solely for validating---------------
-function nameStringValidator(string) {
-  const regexp = /^[a-zA-Z ]{1,60}$/;
+function getStringValidator(string) { // validator for the get end points
+  const regexp = /^[a-zA-Z0-9 -]$/;
+  
+  if (typeof string !== "string" && !(string instanceof String)) {
+    return false;
+  }
+  if (!string.match(regexp)) {
+    return false;
+  }
+  return true;
+}
 
+
+//---------------Validator solely for validating---------------
+function nameStringValidator(string, characterLength) {
+  const regexp = /^[a-zA-Z ]$/;
+  if (string.length > characterLength) {
+    return false;
+  }
   if (typeof string !== "string" && !(string instanceof String)) {
     return false;
   }
@@ -85,7 +87,7 @@ app.get("/products", async (req, res) => {
   let productName = req.query.name;
 
   if (productName) {
-    if (!stringValidator(productName)) {
+    if (!getStringValidator(productName)) {
       res.status(400).send({ message: `Invalid product name ${productName}` });
       return;
     }
@@ -94,7 +96,9 @@ app.get("/products", async (req, res) => {
 
   pool
     .query(selectProductsQuery)
-    .then((result) => res.json(result.rows))
+    .then((result) => {
+      res.json(result.rows)
+    })
     .catch((e) => {
       res.status(500).send(e);
       console.error(e);
@@ -150,12 +154,12 @@ app.get("/customers/:customerId/orders", function (req, res) {
 
 //Create- Create new customer entry
 app.post("/customers", function (req, res) {
+  console.log(req.body)
   const newCustomerId = parseInt(req.body.id);
   const newCustomerName = req.body.name;
   const newCustomerAddress = req.body.address;
   const newCustomerCity = req.body.city;
   const newCustomerCountry = req.body.country;
-
   if (!Number.isInteger(newCustomerId) || newCustomerId <= 0) {
     return res.status(400).send({
       message: `The customer id ${newCustomerId} should be a positive integer.`,
@@ -173,27 +177,27 @@ app.post("/customers", function (req, res) {
     });
 
   if (newCustomerName) {
-    if (!nameStringValidator(newCustomerName)) {
+    if (!nameStringValidator(newCustomerName,50)) {
       res.status(400).send({
-        message: `Invalid customer name ${newCustomerName} only English characters accepted`,
+        message: `Invalid customer name ${newCustomerName} only English characters are accepted and there is a limit of 50 characters`,
       });
       return;
     }
   }
 
   if (newCustomerCity) {
-    if (!nameStringValidator(newCustomerCity)) {
+    if (!nameStringValidator(newCustomerCity,30)) {
       res.status(400).send({
-        message: `Invalid  city name ${newCustomerCity} only English characters accepted`,
+        message: `Invalid  city name ${newCustomerCity} only English characters are accepted and there is a limit of 30 characters`,
       });
       return;
     }
   }
 
   if (newCustomerCountry) {
-    if (!nameStringValidator(newCustomerCountry)) {
+    if (!nameStringValidator(newCustomerCountry,20)) {
       res.status(400).send({
-        message: `Invalid  country name ${newCustomerCountry} only English characters accepted`,
+        message: `Invalid  country name ${newCustomerCountry} only English characters are accepted and there is a limit of 20 characters`,
       });
       return;
     }
@@ -231,14 +235,14 @@ app.post("/customers", function (req, res) {
 app.post("/products", function (req, res) {
   const newProductName = req.body.product_name;
 
-  // if (newProductName) {
-  //   if (!nameStringValidator(newProductName)) {
-  //     res.status(400).send({
-  //       message: `Invalid product name ${newProductName} only English characters accepted`
-  //     });
-  //     return;
-  //   }
-  // }
+  if (newProductName) {
+    if (!productStringValidator(newProductName)) {
+      res.status(400).send({
+        message: `Invalid product name ${newProductName} only English characters are accepted and there is a limit of 100 characters`,
+      });
+      return;
+    }
+  }
 
   pool
     .query(`SELECT * FROM products WHERE product_name=$1`, [newProductName])
@@ -321,9 +325,6 @@ app.post("/availability", function (req, res) {
         });
       }
     });
-
-  
-  
   
   const insertProductAvailabilityQuery =
     "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
@@ -340,75 +341,13 @@ app.post("/availability", function (req, res) {
     });
 });
 
-// app.post("/availability", function (req, res) {
-//   const newUnitProdId = req.body.prod_id;
-//   const newSupplierId = req.body.supp_id;
-//   const newUnitPrice = req.body.unit_price;
-
-//   if (!Number.isInteger(newUnitPrice) || newUnitPrice <= 0) {
-//     return res
-//       .status(400)
-//       .send("The the unit price must be a positive integer.");
-//   }
-
-//   // Error handler for product id
-//   pool
-//     .query("SELECT * FROM products WHERE id=$1", [newUnitProdId])
-//     .then((result) => {
-//       if (result.rows.length < 0) {
-//         return res.status(400).send({
-//           message: `FATAL ERROR: This product ${newUnitProdId} does not exist!`,
-//         });
-//       }
-//     });
-
-//   //Error handler for supplier id
-//   pool
-//     .query("SELECT * FROM suppliers WHERE id=$1", [newSupplierId])
-//     .then((result) => {
-//       if (result.rows.length < 0) {
-//         return res.status(400).send({
-//           message: `FATAL ERROR: This supplier ${newSupplierId} does not exist`,
-//         });
-//       }
-//     });
-
-//   pool
-//     .query(
-//       "SELECT * FROM product_availability WHERE prod_id=$1 AND supp_id=$2",
-//       [newUnitProdId, newSupplierId]
-//     )
-//     .then((result) => {
-//       if (result.rows.length > 0) {
-//         return res.status(400).send({
-//           message: `FATAL ERROR: Either product ${newUnitProdId} or a supplier ID ${newSupplierId} or both do not exist in the database`,
-//         });
-//       } else {
-//         const insertProductAvailabilityQuery =
-//           "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
-//         pool
-//           .query(insertProductAvailabilityQuery, [
-//             newUnitProdId,
-//             newSupplierId,
-//             newUnitPrice,
-//           ])
-//           .then(() =>
-//             res.send({ message: `new product availability created!` })
-//           )
-//           .catch((e) => {
-//             console.error(e.stack);
-//             res.status(500).send({ message: "Internal Server Error" });
-//           });
-//       }
-//     });
-// });
 
 app.post("/customers/:customerId/orders", function (req, res) {
   const newCustomerId = parseInt(req.params.customerId);
   const newOrderDate = new Date().toISOString();
   const newOrderReference = req.body.order_reference;
-
-  if (!Number.isInteger(newCustomerId) || newCustomerId <= 0) {
+ 
+if (!Number.isInteger(newCustomerId) || newCustomerId <= 0) {
     return res
       .status(400)
       .send("The number for the customer ID should be a positive integer.");
@@ -532,6 +471,3 @@ app.delete("/customers/:customerId", function (req, res) {
 app.listen(4010, function () {
   console.log("Server is listening on port 4010. Ready to accept requests!");
 });
-// const listener = app.listen(process.env.PORT || 4010, function () {
-//   console.log("Your app is listening on port " + listener.address().port);
-// });
