@@ -10,7 +10,7 @@ app.use(cors({ origin: "*" }));
 const pool = new Pool();
 
 //-----------------SQL queries-----------------------------
- let selectProductsQuery = `
+let selectProductsQuery = `
   SELECT
     * FROM products AS p
     INNER JOIN product_availability AS p_a ON p_a.prod_id=p.id
@@ -33,11 +33,6 @@ const customerSelectIdOrdersQuery = `SELECT
         INNER JOIN customers ON customers.id=orders.customer_id
       WHERE customer_id= $1`;
 
-
-
-
-
-
 const suppliersSelectQuery = `SELECT * FROM suppliers`;
 const productsSelectQuery = `
 SELECT
@@ -56,7 +51,7 @@ function isValidID(id) {
 }
 
 function stringValidator(string) {
-    const regexp = /^[a-zA-Z0-9 -]{1,60}$/;
+  const regexp = /^[a-zA-Z0-9 -]{1,60}$/;
 
   if (typeof string !== "string" && !(string instanceof String)) {
     return false;
@@ -67,7 +62,7 @@ function stringValidator(string) {
   return true;
 }
 
-//---------------Validator solely for validating--------------- 
+//---------------Validator solely for validating---------------
 function nameStringValidator(string) {
   const regexp = /^[a-zA-Z ]{1,60}$/;
 
@@ -84,18 +79,18 @@ function nameStringValidator(string) {
 const invalidOrderMessage = { message: "Invalid order id" };
 
 //------------------------------------GET----------------------------------------------------------
-   
+
 // Read - get all products & filter products by name
 app.get("/products", async (req, res) => {
   let productName = req.query.name;
- 
+
   if (productName) {
     if (!stringValidator(productName)) {
-      res.status(400).send({message:`Invalid product name ${productName}`});
-       return;
-     }
+      res.status(400).send({ message: `Invalid product name ${productName}` });
+      return;
+    }
     selectProductsQuery = `${selectProductsQuery} WHERE product_name ILIKE '%${productName}%'`;
-  }     
+  }
 
   pool
     .query(selectProductsQuery)
@@ -121,7 +116,7 @@ app.get("/customers/:customerId", function (req, res) {
   const customerId = parseInt(req.params.customerId);
 
   if (isNaN(customerId) || customerId <= 0) {
-    res.status(400).send({message:`Bad customer ID: ${customerId}`});
+    res.status(400).send({ message: `Bad customer ID: ${customerId}` });
     return;
   }
 
@@ -133,14 +128,12 @@ app.get("/customers/:customerId", function (req, res) {
     .catch((e) => console.error(e));
 });
 
-
-
 // Read-  get a customer order by id
 app.get("/customers/:customerId/orders", function (req, res) {
   const customerId = parseInt(req.params.customerId);
 
   if (!isValidID(customerId)) {
-    res.status(400).send({message: `Bad customer ID: ${customerId}`});
+    res.status(400).send({ message: `Bad customer ID: ${customerId}` });
     return; //
   }
 
@@ -164,61 +157,55 @@ app.post("/customers", function (req, res) {
   const newCustomerCountry = req.body.country;
 
   if (!Number.isInteger(newCustomerId) || newCustomerId <= 0) {
-    return res
-      .status(400)
-      .send({
-        message: `The customer id ${newCustomerId} should be a positive integer.`,
-      });
+    return res.status(400).send({
+      message: `The customer id ${newCustomerId} should be a positive integer.`,
+    });
   }
 
   pool
     .query("SELECT * FROM customers WHERE id=$1", [newCustomerId])
     .then((result) => {
       if (result.rows.length > 0) {
-        return res
-          .status(400)
-          .send({message: `FATAL ERROR: A customer with the same id ${newCustomerId} already exists!`});
+        return res.status(400).send({
+          message: `FATAL ERROR: A customer with the same id ${newCustomerId} already exists!`,
+        });
       }
     });
 
-if (newCustomerName) {
-  if (!nameStringValidator(newCustomerName)) {
-    res
-      .status(400)
-      .send({
+  if (newCustomerName) {
+    if (!nameStringValidator(newCustomerName)) {
+      res.status(400).send({
         message: `Invalid customer name ${newCustomerName} only English characters accepted`,
       });
-    return;
+      return;
+    }
   }
-} 
-  
-if (newCustomerCity) {
-  if (!nameStringValidator(newCustomerCity)) {
-    res
-      .status(400)
-      .send({ message: `Invalid  city name ${newCustomerCity} only English characters accepted` });
-    return;
+
+  if (newCustomerCity) {
+    if (!nameStringValidator(newCustomerCity)) {
+      res.status(400).send({
+        message: `Invalid  city name ${newCustomerCity} only English characters accepted`,
+      });
+      return;
+    }
   }
-} 
-  
-if (newCustomerCountry) {
-  if (!nameStringValidator(newCustomerCountry)) {
-    res
-      .status(400)
-      .send({
+
+  if (newCustomerCountry) {
+    if (!nameStringValidator(newCustomerCountry)) {
+      res.status(400).send({
         message: `Invalid  country name ${newCustomerCountry} only English characters accepted`,
       });
-    return;
+      return;
+    }
   }
-} 
-  
+
   pool
     .query("SELECT * FROM customers WHERE name=$1", [newCustomerName])
     .then((result) => {
       if (result.rows.length > 0) {
-        return res
-          .status(400)
-          .send({message:`FATAL ERROR: A customer with the same name ${newCustomerName} already exists!`});
+        return res.status(400).send({
+          message: `FATAL ERROR: A customer with the same name ${newCustomerName} already exists!`,
+        });
       } else {
         const query =
           "INSERT INTO customers (id, name, address, city, country) VALUES ($1, $2, $3, $4,$5)";
@@ -241,7 +228,6 @@ if (newCustomerCountry) {
     });
 });
 
-
 app.post("/products", function (req, res) {
   const newProductName = req.body.product_name;
 
@@ -252,8 +238,8 @@ app.post("/products", function (req, res) {
   //     });
   //     return;
   //   }
-  // } 
-  
+  // }
+
   pool
     .query(`SELECT * FROM products WHERE product_name=$1`, [newProductName])
     .then((result) => {
@@ -279,18 +265,20 @@ app.post("/products", function (req, res) {
     });
 });
 
-
-/*Add a new POST endpoint /availability to create a new product availability
- (with a price and a supplier id). 
- Check that the price is a positive integer 
- and that both the product and supplier ID's exist in the database, 
- otherwise return an error.
-
- */
 app.post("/availability", function (req, res) {
-  const newUnitProdId = req.body.prod_id;
-  const newSupplierId = req.body.supp_id;
-  const newUnitPrice = req.body.unit_price;
+  const newUnitProdId = parseInt(req.body.prod_id);
+  const newSupplierId = parseInt(req.body.supp_id);
+  const newUnitPrice = parseFloat(req.body.unit_price);
+
+  if (!isValidID(newUnitProdId)) {
+    res.status(400).send({ message: `Bad product ID: ${newUnitProdId}` });
+    return; //
+  }
+
+  if (!isValidID(newSupplierId)) {
+    res.status(400).send({ message: `Bad supplier ID: ${newSupplierId}` });
+    return; //
+  }
 
   if (!Number.isInteger(newUnitPrice) || newUnitPrice <= 0) {
     return res
@@ -302,24 +290,23 @@ app.post("/availability", function (req, res) {
   pool
     .query("SELECT * FROM products WHERE id=$1", [newUnitProdId])
     .then((result) => {
-      if (result.rows.length < 0) {
+      if (result.rows.length === 0) {
         return res.status(400).send({
           message: `FATAL ERROR: This product ${newUnitProdId} does not exist!`,
         });
       }
     });
 
-
   //Error handler for supplier id
-  // pool
-  //   .query("SELECT * FROM suppliers WHERE id=$1", [newSupplierId])
-  //   .then((result) => {
-  //     if (result.rows.length < 0) {
-  //       return res.status(400).send({
-  //         message: `FATAL ERROR: This supplier ${newSupplierId} does not exist`,
-  //       });
-  //     }
-  //   });
+  pool
+    .query("SELECT * FROM suppliers WHERE id=$1", [newSupplierId])
+    .then((result) => {
+      if (result.rows.length === 0) {
+        return res.status(400).send({
+          message: `FATAL ERROR: This supplier ${newSupplierId} does not exist`,
+        });
+      }
+    });
 
   pool
     .query(
@@ -327,30 +314,94 @@ app.post("/availability", function (req, res) {
       [newUnitProdId, newSupplierId]
     )
     .then((result) => {
+      console.log(result);
       if (result.rows.length > 0) {
         return res.status(400).send({
-          message: `FATAL ERROR: Either product ${newUnitProdId} or a supplier ID ${newSupplierId} or both do not exist in the database`,
+          message: `ALERT: The combination of Product id ${newUnitProdId} and Supplier id ${newSupplierId} already exist please a put method update the values`,
         });
-      } else {
-        const insertProductAvailabilityQuery =
-          "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
-        pool
-          .query(insertProductAvailabilityQuery, [
-            newUnitProdId,
-            newSupplierId,
-            newUnitPrice,
-          ])
-          .then(() =>
-            res.send({ message: `new product availability created!` })
-          )
-          .catch((e) => {
-            console.error(e.stack);
-            res.status(500).send({ message: "Internal Server Error" });
-          });
       }
+    });
+
+  
+  
+  
+  const insertProductAvailabilityQuery =
+    "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
+  pool
+    .query(insertProductAvailabilityQuery, [
+      newUnitProdId,
+      newSupplierId,
+      newUnitPrice,
+    ])
+    .then(() => res.send({ message: `new product availability created!` }))
+    .catch((e) => {
+      console.error(e.stack);
+      res.status(500).send({ message: "Internal Server Error" });
     });
 });
 
+// app.post("/availability", function (req, res) {
+//   const newUnitProdId = req.body.prod_id;
+//   const newSupplierId = req.body.supp_id;
+//   const newUnitPrice = req.body.unit_price;
+
+//   if (!Number.isInteger(newUnitPrice) || newUnitPrice <= 0) {
+//     return res
+//       .status(400)
+//       .send("The the unit price must be a positive integer.");
+//   }
+
+//   // Error handler for product id
+//   pool
+//     .query("SELECT * FROM products WHERE id=$1", [newUnitProdId])
+//     .then((result) => {
+//       if (result.rows.length < 0) {
+//         return res.status(400).send({
+//           message: `FATAL ERROR: This product ${newUnitProdId} does not exist!`,
+//         });
+//       }
+//     });
+
+//   //Error handler for supplier id
+//   pool
+//     .query("SELECT * FROM suppliers WHERE id=$1", [newSupplierId])
+//     .then((result) => {
+//       if (result.rows.length < 0) {
+//         return res.status(400).send({
+//           message: `FATAL ERROR: This supplier ${newSupplierId} does not exist`,
+//         });
+//       }
+//     });
+
+//   pool
+//     .query(
+//       "SELECT * FROM product_availability WHERE prod_id=$1 AND supp_id=$2",
+//       [newUnitProdId, newSupplierId]
+//     )
+//     .then((result) => {
+//       if (result.rows.length > 0) {
+//         return res.status(400).send({
+//           message: `FATAL ERROR: Either product ${newUnitProdId} or a supplier ID ${newSupplierId} or both do not exist in the database`,
+//         });
+//       } else {
+//         const insertProductAvailabilityQuery =
+//           "INSERT INTO product_availability (prod_id, supp_id, unit_price) VALUES ($1, $2, $3)";
+//         pool
+//           .query(insertProductAvailabilityQuery, [
+//             newUnitProdId,
+//             newSupplierId,
+//             newUnitPrice,
+//           ])
+//           .then(() =>
+//             res.send({ message: `new product availability created!` })
+//           )
+//           .catch((e) => {
+//             console.error(e.stack);
+//             res.status(500).send({ message: "Internal Server Error" });
+//           });
+//       }
+//     });
+// });
 
 app.post("/customers/:customerId/orders", function (req, res) {
   const newCustomerId = parseInt(req.params.customerId);
@@ -417,17 +468,15 @@ app.put("/customers/:customerId", function (req, res) {
     .catch((e) => console.error(e));
 });
 
-
-
 //----------------------------------------DELETE--------------------------------------------------------
 
 app.delete("/orders/:orderId", function (req, res) {
   const orderId = parseInt(req.params.orderId);
 
-   if (!isValidID(orderId)) {
-     res.status(404).send(invalidOrderMessage);
-     return;
-   }
+  if (!isValidID(orderId)) {
+    res.status(404).send(invalidOrderMessage);
+    return;
+  }
   pool
     .query("DELETE FROM order_items WHERE order_id=$1", [orderId])
     .then(() => {
@@ -442,7 +491,6 @@ app.delete("/orders/:orderId", function (req, res) {
     })
     .catch((e) => console.error(e));
 });
-
 
 app.delete("/customers/:customerId", function (req, res) {
   const customerId = parseInt(req.params.customerId);
@@ -480,7 +528,6 @@ app.delete("/customers/:customerId", function (req, res) {
       res.status(500).send({ message: "Internal Server Error" });
     });
 });
-
 
 app.listen(4010, function () {
   console.log("Server is listening on port 4010. Ready to accept requests!");
